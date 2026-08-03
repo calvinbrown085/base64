@@ -4,7 +4,9 @@ This project provides a minimalist, client-side web application for base64-encod
 
 ## Architecture
 
-The application is a single-page web utility implemented entirely within `index.html`. It operates as a static file, executing all its logic directly within the user's web browser. There is no backend server component, database, or complex build process involved — the selected file is read with the `FileReader` API and never leaves the machine.
+The application is a single-page web utility implemented within `index.html`. It operates as a static file, executing all its logic directly within the user's web browser. There is no backend server component, database, or complex build process involved — the selected file is read with the `FileReader` API and never leaves the machine.
+
+The page is part of the tool family on `calvinbrown.dev` and loads its shared chrome from `tools.calvinbrown.dev`: `shared/tools.css` for the nav and toast styling, `shared/registry.js` for the list of sibling tools, and `shared/tools.js` for theming, the nav bar, clipboard handling, drag-and-drop wiring, and analytics. That means **`tools.calvinbrown.dev` must be deployed for this page to work** — the encode and copy paths call into `Tools`.
 
 Files are read as an `ArrayBuffer` rather than as text, so the output matches `base64` byte for byte regardless of the file's character encoding. Encoding is done with `btoa()` over 32KB chunks of the byte array, which avoids the call stack limits you hit passing a large array to `String.fromCharCode`.
 
@@ -12,9 +14,13 @@ By default the output is a single unwrapped line, matching the macOS/BSD `base64
 
 ## Key Files
 
-*   `index.html`: This is the sole application file. It contains all the necessary HTML structure for the user interface, any embedded CSS for styling, and the JavaScript logic responsible for reading, encoding, and displaying the file.
+*   `index.html`: The whole application. It contains the HTML structure for the user interface, any embedded CSS for styling, and the JavaScript logic responsible for reading, encoding, and displaying the file. Cross-cutting concerns — theme, nav, clipboard, drop zone — come from the shared assets rather than living here.
 *   `README.md`: Provides a concise overview of the project's purpose.
 *   `CNAME`: Specifies a custom domain name for hosting the application, typically used in conjunction with GitHub Pages.
+
+## Analytics
+
+Configured centrally in `tools.js`, so this repo holds no tracking snippet. The page reports structural events only — `encode` with a coarse size bucket, `wrap_toggle`, `copy`, and `download`. File names and file contents are never sent, which is the point of the tool.
 
 ## How to Run
 

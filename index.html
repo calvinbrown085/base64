@@ -5,17 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Base64 Encoder</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // The shared chrome drives dark mode off a class on <html>, so Tailwind
+        // has to be told to do the same instead of reading the media query.
+        tailwind.config = { darkMode: 'class' };
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Shared chrome and helpers for the calvinbrown.dev tools.
+         Source: https://github.com/calvinbrown085/tools -->
+    <link rel="stylesheet" href="https://tools.calvinbrown.dev/shared/tools.css">
+    <script src="https://tools.calvinbrown.dev/shared/registry.js"></script>
+    <script src="https://tools.calvinbrown.dev/shared/tools.js"></script>
+    <script>
+        // Applied before first paint so the page never flashes light then dark.
+        Tools.initTheme();
+    </script>
+
     <style>
         body {
             font-family: 'Inter', sans-serif;
         }
     </style>
 </head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-    <div class="min-h-screen flex items-center justify-center">
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen flex flex-col">
+    <!-- The nav is inserted here as the first child of <body>, so the card below
+         takes the remaining height rather than pushing the page into a scroll. -->
+    <div class="flex-1 flex items-center justify-center">
         <div class="w-full max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
             <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-8">
                 <h1 class="text-3xl sm:text-4xl font-bold text-center mb-2">Base64 Encoder</h1>
@@ -59,11 +78,6 @@
                 </div>
 
                 <p class="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">Everything runs in your browser. Nothing is uploaded anywhere.</p>
-
-                <!-- Toast Notification -->
-                <div id="toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 transition-opacity duration-300">
-                    Copied to clipboard!
-                </div>
             </div>
         </div>
     </div>
@@ -79,7 +93,6 @@
         const copyButton = document.getElementById('copy-button');
         const copyMainButton = document.getElementById('copy-main-button');
         const downloadButton = document.getElementById('download-button');
-        const toast = document.getElementById('toast');
 
         const PLACEHOLDER = 'Your base64 output will appear here';
 
@@ -118,20 +131,20 @@
         }
 
         /**
-         * Formats a byte count for display (1536 -> "1.5 KB").
+         * Buckets a file size into a coarse label for analytics.
+         *
+         * The exact size is a fingerprint of the file, so only the order of
+         * magnitude is ever reported — enough to know whether people bring
+         * config snippets or disk images, and nothing more.
          * @param {number} bytes
          * @returns {string}
          */
-        function formatBytes(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            const units = ['KB', 'MB', 'GB'];
-            let value = bytes / 1024;
-            let unit = 0;
-            while (value >= 1024 && unit < units.length - 1) {
-                value /= 1024;
-                unit++;
-            }
-            return value.toFixed(1) + ' ' + units[unit];
+        function sizeBucket(bytes) {
+            if (bytes < 1024) return 'lt_1kb';
+            if (bytes < 1024 * 100) return 'lt_100kb';
+            if (bytes < 1024 * 1024) return 'lt_1mb';
+            if (bytes < 1024 * 1024 * 10) return 'lt_10mb';
+            return 'gte_10mb';
         }
 
         // --- Rendering ---
@@ -161,7 +174,7 @@
             outputDisplay.classList.toggle('text-gray-500', !hasOutput);
             outputDisplay.classList.toggle('dark:text-gray-400', !hasOutput);
 
-            outputSize.textContent = hasOutput ? formatBytes(encoded.length) + ' of base64' : '';
+            outputSize.textContent = hasOutput ? Tools.formatBytes(encoded.length) + ' of base64' : '';
 
             copyMainButton.disabled = !hasOutput;
             downloadButton.disabled = !hasOutput;
@@ -176,7 +189,7 @@
                 return;
             }
 
-            fileInfo.textContent = file.name + ' — ' + formatBytes(file.size);
+            fileInfo.textContent = file.name + ' — ' + Tools.formatBytes(file.size);
 
             const reader = new FileReader();
 
@@ -184,6 +197,7 @@
                 currentFileName = file.name;
                 encoded = bytesToBase64(new Uint8Array(reader.result));
                 render();
+                Tools.track('encode', { size: sizeBucket(file.size) });
             };
 
             reader.onerror = () => {
@@ -192,6 +206,7 @@
                 currentFileName = '';
                 encoded = '';
                 render();
+                Tools.track('encode_failed', {});
             };
 
             // Read as bytes rather than text so the output matches `base64` byte for byte,
@@ -213,74 +228,26 @@
             handleFile(fileInput.files[0]);
         });
 
-        // Dragging over the label needs its default prevented, otherwise the browser
-        // navigates away to open the dropped file.
-        ['dragenter', 'dragover'].forEach((eventName) => {
-            dropZone.addEventListener(eventName, (event) => {
-                event.preventDefault();
-                dropZone.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-gray-700');
-            });
-        });
+        // Drag-and-drop, including the preventDefault dance that stops the browser
+        // navigating away to open the dropped file.
+        Tools.initDropZone(dropZone, handleFile);
 
-        ['dragleave', 'drop'].forEach((eventName) => {
-            dropZone.addEventListener(eventName, (event) => {
-                event.preventDefault();
-                dropZone.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-gray-700');
-            });
+        wrapToggle.addEventListener('change', () => {
+            render();
+            Tools.track('wrap_toggle', { wrapped: String(wrapToggle.checked) });
         });
-
-        dropZone.addEventListener('drop', (event) => {
-            handleFile(event.dataTransfer.files[0]);
-        });
-
-        wrapToggle.addEventListener('change', render);
 
         /**
          * Copies the currently displayed base64 to the clipboard.
-         * The Clipboard API is preferred but can fail in insecure contexts or iframes,
-         * so document.execCommand('copy') is kept as a fallback.
+         * Tools.copy handles the insecure-context fallback and the toast.
          */
         function copyOutput() {
             if (!encoded) {
                 return;
             }
 
-            const text = currentOutput();
-
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(text).then(showToast).catch(() => legacyCopy(text));
-                return;
-            }
-
-            legacyCopy(text);
-        }
-
-        /**
-         * Clipboard fallback using a temporary off-screen textarea.
-         * @param {string} text
-         */
-        function legacyCopy(text) {
-            try {
-                const textArea = document.createElement('textarea');
-                textArea.value = text;
-
-                // Style it to be off-screen
-                textArea.style.position = 'fixed';
-                textArea.style.top = '-9999px';
-                textArea.style.left = '-9999px';
-
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-
-                document.execCommand('copy');
-
-                document.body.removeChild(textArea);
-
-                showToast();
-            } catch (err) {
-                console.error('Failed to copy text: ', err);
-            }
+            Tools.copy(currentOutput());
+            Tools.track('copy', { wrapped: String(wrapToggle.checked) });
         }
 
         copyButton.addEventListener('click', copyOutput);
@@ -306,20 +273,13 @@
             document.body.removeChild(link);
 
             URL.revokeObjectURL(url);
-        });
 
-        /**
-         * Displays a short-lived "Copied to clipboard!" notification.
-         */
-        function showToast() {
-            toast.classList.remove('opacity-0');
-            setTimeout(() => {
-                toast.classList.add('opacity-0');
-            }, 2000); // Hide after 2 seconds
-        }
+            Tools.track('download', { wrapped: String(wrapToggle.checked) });
+        });
 
         // --- Initial State ---
         render();
+        Tools.mountNav();
     </script>
 </body>
 </html>
