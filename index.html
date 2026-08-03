@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base64 Encoder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="w-full max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
+            <div class="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-8">
+                <h1 class="text-3xl sm:text-4xl font-bold text-center mb-2">Base64 Encoder</h1>
+                <p class="text-center text-gray-500 dark:text-gray-400 mb-8">Drop a file in and get the same string <code class="font-mono text-sm">base64</code> would give you.</p>
+
+                <!-- Drop Zone -->
+                <label id="drop-zone" for="file-input" class="block cursor-pointer border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg px-6 py-10 text-center mb-6 transition-colors hover:border-blue-500 dark:hover:border-blue-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mx-auto mb-3 text-gray-400 dark:text-gray-500"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <span class="block font-medium">Drop a file here, or click to choose one</span>
+                    <span id="file-info" class="block text-sm text-gray-500 dark:text-gray-400 mt-1">No file selected</span>
+                    <input id="file-input" type="file" class="hidden">
+                </label>
+
+                <!-- Options -->
+                <div class="flex items-center justify-between mb-4 text-sm">
+                    <label class="inline-flex items-center gap-2 cursor-pointer text-gray-600 dark:text-gray-300">
+                        <input id="wrap-toggle" type="checkbox" class="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+                        <span>Wrap at 76 characters <span class="text-gray-400 dark:text-gray-500">(GNU coreutils style)</span></span>
+                    </label>
+                    <span id="output-size" class="text-gray-400 dark:text-gray-500"></span>
+                </div>
+
+                <!-- Base64 Output Area -->
+                <div class="relative mb-6">
+                    <div id="output-display" class="bg-gray-100 dark:bg-gray-700 rounded-lg pl-4 pr-12 py-3 font-mono text-sm break-all whitespace-pre-wrap select-all max-h-72 overflow-y-auto overflow-x-auto text-gray-500 dark:text-gray-400">
+                        Your base64 output will appear here
+                    </div>
+                    <button id="copy-button" class="absolute top-3 right-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" title="Copy to clipboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <button id="copy-main-button" class="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 disabled:hover:scale-100 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-800" disabled>
+                        Copy Base64
+                    </button>
+                    <button id="download-button" class="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105 disabled:hover:scale-100 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600" disabled>
+                        Download .b64
+                    </button>
+                </div>
+
+                <p class="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">Everything runs in your browser. Nothing is uploaded anywhere.</p>
+
+                <!-- Toast Notification -->
+                <div id="toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 transition-opacity duration-300">
+                    Copied to clipboard!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Element Selection ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileInfo = document.getElementById('file-info');
+        const wrapToggle = document.getElementById('wrap-toggle');
+        const outputDisplay = document.getElementById('output-display');
+        const outputSize = document.getElementById('output-size');
+        const copyButton = document.getElementById('copy-button');
+        const copyMainButton = document.getElementById('copy-main-button');
+        const downloadButton = document.getElementById('download-button');
+        const toast = document.getElementById('toast');
+
+        const PLACEHOLDER = 'Your base64 output will appear here';
+
+        // --- Application State ---
+        // The unwrapped base64 string for the currently loaded file, plus its name.
+        // Wrapping is applied at render time so toggling it never re-reads the file.
+        let encoded = '';
+        let currentFileName = '';
+
+        // --- Core Encoding Function ---
+        /**
+         * Encodes raw bytes as base64, exactly as `base64` on the command line would.
+         * btoa() takes a "binary string" (one char per byte), so the bytes are converted
+         * in chunks — String.fromCharCode with a huge spread would blow the call stack.
+         * @param {Uint8Array} bytes The raw file contents.
+         * @returns {string} The base64 representation, on a single unwrapped line.
+         */
+        function bytesToBase64(bytes) {
+            const CHUNK_SIZE = 0x8000; // 32KB per chunk keeps well under argument limits
+            let binary = '';
+            for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
+            }
+            return btoa(binary);
+        }
+
+        /**
+         * Splits a base64 string into fixed-width lines.
+         * GNU coreutils `base64` wraps at 76 columns by default; macOS/BSD does not wrap at all.
+         * @param {string} str The unwrapped base64 string.
+         * @param {number} width Characters per line.
+         * @returns {string} The wrapped string.
+         */
+        function wrapAt(str, width) {
+            return str.replace(new RegExp('.{1,' + width + '}', 'g'), '$&\n').trimEnd();
+        }
+
+        /**
+         * Formats a byte count for display (1536 -> "1.5 KB").
+         * @param {number} bytes
+         * @returns {string}
+         */
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            const units = ['KB', 'MB', 'GB'];
+            let value = bytes / 1024;
+            let unit = 0;
+            while (value >= 1024 && unit < units.length - 1) {
+                value /= 1024;
+                unit++;
+            }
+            return value.toFixed(1) + ' ' + units[unit];
+        }
+
+        // --- Rendering ---
+
+        /**
+         * Writes the current encoding into the output area, honoring the wrap setting,
+         * and enables or disables the actions that depend on having output.
+         */
+        function render() {
+            const hasOutput = encoded.length > 0;
+            const wrapped = hasOutput && wrapToggle.checked;
+
+            outputDisplay.textContent = hasOutput
+                ? (wrapped ? wrapAt(encoded, 76) : encoded)
+                : PLACEHOLDER;
+
+            // Wrapped output has to keep its own line breaks, otherwise the box soft-wraps
+            // the 76-character lines and the column structure is impossible to see. A smaller
+            // font fits 76 columns on most screens; anything narrower scrolls sideways.
+            outputDisplay.classList.toggle('whitespace-pre', wrapped);
+            outputDisplay.classList.toggle('text-xs', wrapped);
+            outputDisplay.classList.toggle('whitespace-pre-wrap', !wrapped);
+            outputDisplay.classList.toggle('break-all', !wrapped);
+            outputDisplay.classList.toggle('text-sm', !wrapped);
+
+            // The placeholder is muted; real output uses the normal text color.
+            outputDisplay.classList.toggle('text-gray-500', !hasOutput);
+            outputDisplay.classList.toggle('dark:text-gray-400', !hasOutput);
+
+            outputSize.textContent = hasOutput ? formatBytes(encoded.length) + ' of base64' : '';
+
+            copyMainButton.disabled = !hasOutput;
+            downloadButton.disabled = !hasOutput;
+        }
+
+        /**
+         * Reads a File, encodes it, and updates the UI.
+         * @param {File} file
+         */
+        function handleFile(file) {
+            if (!file) {
+                return;
+            }
+
+            fileInfo.textContent = file.name + ' — ' + formatBytes(file.size);
+
+            const reader = new FileReader();
+
+            reader.onload = () => {
+                currentFileName = file.name;
+                encoded = bytesToBase64(new Uint8Array(reader.result));
+                render();
+            };
+
+            reader.onerror = () => {
+                console.error('Failed to read file: ', reader.error);
+                fileInfo.textContent = 'Could not read that file';
+                currentFileName = '';
+                encoded = '';
+                render();
+            };
+
+            // Read as bytes rather than text so the output matches `base64` byte for byte,
+            // regardless of the file's encoding or whether it's really text at all.
+            reader.readAsArrayBuffer(file);
+        }
+
+        /**
+         * Returns the output as it is currently displayed (wrapped or not).
+         * @returns {string}
+         */
+        function currentOutput() {
+            return wrapToggle.checked ? wrapAt(encoded, 76) : encoded;
+        }
+
+        // --- Event Listeners ---
+
+        fileInput.addEventListener('change', () => {
+            handleFile(fileInput.files[0]);
+        });
+
+        // Dragging over the label needs its default prevented, otherwise the browser
+        // navigates away to open the dropped file.
+        ['dragenter', 'dragover'].forEach((eventName) => {
+            dropZone.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                dropZone.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-gray-700');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach((eventName) => {
+            dropZone.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                dropZone.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-gray-700');
+            });
+        });
+
+        dropZone.addEventListener('drop', (event) => {
+            handleFile(event.dataTransfer.files[0]);
+        });
+
+        wrapToggle.addEventListener('change', render);
+
+        /**
+         * Copies the currently displayed base64 to the clipboard.
+         * The Clipboard API is preferred but can fail in insecure contexts or iframes,
+         * so document.execCommand('copy') is kept as a fallback.
+         */
+        function copyOutput() {
+            if (!encoded) {
+                return;
+            }
+
+            const text = currentOutput();
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(showToast).catch(() => legacyCopy(text));
+                return;
+            }
+
+            legacyCopy(text);
+        }
+
+        /**
+         * Clipboard fallback using a temporary off-screen textarea.
+         * @param {string} text
+         */
+        function legacyCopy(text) {
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+
+                // Style it to be off-screen
+                textArea.style.position = 'fixed';
+                textArea.style.top = '-9999px';
+                textArea.style.left = '-9999px';
+
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                document.execCommand('copy');
+
+                document.body.removeChild(textArea);
+
+                showToast();
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+            }
+        }
+
+        copyButton.addEventListener('click', copyOutput);
+        copyMainButton.addEventListener('click', copyOutput);
+
+        /**
+         * Saves the base64 output as a .b64 file next to whatever was uploaded.
+         */
+        downloadButton.addEventListener('click', () => {
+            if (!encoded) {
+                return;
+            }
+
+            // `base64 file > file.b64` leaves a trailing newline, so match that.
+            const blob = new Blob([currentOutput() + '\n'], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = (currentFileName || 'output') + '.b64';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            URL.revokeObjectURL(url);
+        });
+
+        /**
+         * Displays a short-lived "Copied to clipboard!" notification.
+         */
+        function showToast() {
+            toast.classList.remove('opacity-0');
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 2000); // Hide after 2 seconds
+        }
+
+        // --- Initial State ---
+        render();
+    </script>
+</body>
+</html>
